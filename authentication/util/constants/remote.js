@@ -1,0 +1,23 @@
+const REMOTE_USER_DEVICE_TYPE = 'remoteAccess';
+const REMOTE_ACCESS_SUPPORT_USER_ID = '40';
+const REMOTE_ACCESS_ITFM_USER_ID = '38';
+const SUPPORT_USER_TYPE = 'supportUser';
+const STOR_MANAGER_GROUP = 'Store Manager';
+const FRANCHISE_OWNER_GROUP = 'Franchise Owner';
+const STOR_APP_PRODSUP = 'STOR-APP-ProdSup';
+const FEATURES = {
+  ORDERING: 'ordering',
+  INVENTORY: 'inventory',
+  PROMOTIONS: 'promo',
+};
+
+module.exports = {
+  FEATURES,
+  REMOTE_USER_DEVICE_TYPE,
+  SUPPORT_USER_TYPE,
+  REMOTE_ACCESS_SUPPORT_USER_ID,
+  REMOTE_ACCESS_ITFM_USER_ID,
+  STOR_APP_PRODSUP,
+  STOR_MANAGER_GROUP,
+  FRANCHISE_OWNER_GROUP,
+};

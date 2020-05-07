@@ -1,0 +1,90 @@
+{
+  "name": "7boss-auth",
+  "version": "1.0.4-beta",
+  "description": "",
+  "main": "dist/server.js",
+  "scripts": {
+    "build:dev": "webpack --config config/webpack.config.dev.js && cd dist && node server.js",
+    "build:prod": "webpack --config config/webpack.config.prod.js",
+    "build:docker:dev": "rm -rf node_modules && npm install && npm run build:dev && npm run zip && docker build --rm -t devauth",
+    "start:docker:dev": "docker run -p 3110:3110 -t devauth",
+    "build:docker:local": "npm install && npm run build:prod && npm run zip && docker build --rm -t localauth .",
+    "start:docker:local": "docker run -p 3110:3110 -t localauth",
+    "build": "npm run build:prod && npm run zip",
+    "server": "npm install && npm run build:dev && npm run watch:server",
+    "start": "npm-run-all --parallel watch:server watch:build",
+    "mocha_test": "NODE_ENV=test mocha --require @babel/register test --recursive                                                   --timeout 15000 --exit",
+    "auth_coo_test": "NODE_ENV=test mocha --require @babel/register test test/coordinators/auth                           --timeout 10000 --exit",
+    "remote_coo_test": "NODE_ENV=test mocha --require @babel/register test test/coordinators/remote                           --timeout 15000 --exit",
+    "store_coo_test": "NODE_ENV=test mocha --require @babel/register test test/coordinators/store                           --timeout 15000 --exit",
+    "user_coo_test": "NODE_ENV=test mocha --require @babel/register test test/coordinators/user                           --timeout 10000 --exit",
+    "watch:build": "webpack --watch --config config/webpack.config.dev.js",
+    "watch:server": "nodemon \"./dist/server.js\" ",
+    "zip-comment": "This is comment for the zip script below ... the find/xargs/touch command makes sure the zip artifact is identical by ignoring changes to timestamps",
+    "zip": "find . -print0 | xargs -0 touch -m -t 198001010000.00 && zip -X -rq archive.zip ./dist/* -x '/test/*'"
+  },
+  "homepage": "http://localhost:3110/",
+  "nyc": {
+    "include": [
+      "**/*.js"
+    ],
+    "extension": [
+      "*.js"
+    ],
+    "reporter": [
+      "text-summary",
+      "html"
+    ],
+    "sourceMap": true,
+    "instrument": true
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@7eleven/7boss-crypto": "1.0.2",
+    "@7eleven/7boss-logger": "1.1.6",
+    "@7eleven/7boss-redis-client": "^1.0.2",
+    "@7eleven/7boss-secrets-manager": "^1.0.3",
+    "@7eleven/7boss-store-check": "1.0.9",
+    "body-parser": "^1.18.3",
+    "cors": "^2.8.5",
+    "expect": "^25.1.0",
+    "express": "^4.16.4",
+    "express-http-proxy": "^1.5.1",
+    "helmet": "^3.21.1",
+    "jest": "^25.1.0",
+    "jsonwebtoken": "^8.5.1",
+    "jwt-decode": "^2.2.0",
+    "moment": "^2.24.0",
+    "nyc": "^15.0.0",
+    "randomatic": "^3.1.1",
+    "request": "^2.88.0",
+    "should": "^13.2.3",
+    "uuidv4": "^5.0.1"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.8.4",
+    "@babel/core": "^7.8.7",
+    "@babel/node": "^7.8.7",
+    "@babel/plugin-proposal-class-properties": "^7.5.5",
+    "@babel/plugin-proposal-decorators": "^7.4.4",
+    "@babel/plugin-transform-runtime": "^7.8.3",
+    "@babel/preset-env": "^7.8.7",
+    "@babel/register": "^7.8.6",
+    "@types/mocha": "^5.2.5",
+    "babel-loader": "^8.0.5",
+    "babel-plugin-transform-decorators": "^6.24.1",
+    "babel-polyfill": "^6.26.0",
+    "browser-sync": "^2.26.7",
+    "chai": "^4.2.0",
+    "copy-webpack-plugin": "^4.6.0",
+    "dotenv": "^6.0.0",
+    "mocha": "^7.1.0",
+    "node-mocks-http": "^1.7.5",
+    "nodemon": "^1.19.4",
+    "supertest": "^4.0.2",
+    "webpack": "4.28.3",
+    "webpack-cli": "^3.3.10",
+    "webpack-node-externals": "^1.7.2"
+  }
+}

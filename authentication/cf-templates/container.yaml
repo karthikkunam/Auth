@@ -1,0 +1,730 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Parameters:
+  ServiceName:
+    Type: String
+    Default: 7bossauth
+  EnvironmentName:
+    Type: String
+    Description: The environment this infrastructure is being provisioned for.
+    AllowedValues: [dev, qa, uat, prod]
+    ConstraintDescription: must specify dev, qa, uat, or prod
+    Default: dev
+  BranchName:
+    Type: String
+    Default: master
+  logLevel:
+    Type: String
+    Description: Log level for Lambda functions
+    AllowedValues: [debug, info, warn, error]
+    ConstraintDescription: must specify DEBUG, INFO, WARN, or ERROR
+    Default: info
+  7LogKinesisStream:
+    Type: String
+    Description: 7Logs Kinesis Stream name to write to.
+    Default: prod-7LogsNonProdKinesisStream
+  writerRoleArn:
+    Type: String
+    Description: The ARN to the managed IAM policy that provides appropriate access to write to the 7Logs Kinesis Stream
+    Default: arn:aws:iam::774047977279:role/app-7logs-master-infrastructure-pr-7LogsWriterRole-ONZ60NU7KSMV
+  DockerImage:
+    Type: String
+    Default: 774047977279.dkr.ecr.us-east-1.amazonaws.com
+Conditions:
+  Production: !Equals [!Ref EnvironmentName, prod]
+  Master: !Equals [!Ref BranchName, master]
+  DevEnvironment: !Or [!Equals [!Ref BranchName, master], !Equals [!Ref BranchName, development]]
+  Dev: !Equals [!Ref EnvironmentName, dev]
+  OncePerAccount: !And
+    - !Condition Master
+    - !Or [!Equals [!Ref EnvironmentName, dev], !Equals [!Ref EnvironmentName, uat]]
+  DevAccount: !Equals [!Ref 'AWS::AccountId', 961287003934]
+Mappings:
+  '961287003934': ## NonProd ##
+    us-east-1:
+      risOldMainVPCId: vpc-0187162d1ffd82352 #ris-data-test-main-east-vpc
+      risNewTgwVPCId: vpc-0262828903bd8dc9f #ris-data-test-main-tgw-east-vpc
+      risOldMainSubnetId1: subnet-080c6044b2a0add8f #ris-data-main-east-prv-1
+      risOldMainSubnetId2: subnet-004ea9a3076d7998c #ris-data-main-east-prv-2
+      risNewTgwSubnetId1: subnet-0272665f1b8205fcf #ris-data-main-tgw-east-prv-1
+      risNewTgwSubnetId2: subnet-0bae9263af2238dfc #ris-data-main-tgw-east-prv-2
+      risEastOldCidr1: '172.22.211.128/25'
+      risEastOldCidr2: '172.22.222.0/24'
+      risEastOldCidr3: '172.22.203.0/25'
+      risEastNewTgwCidr1: '172.22.226.0/23'
+      risEastNewTgwCidr2: '172.22.244.0/25'
+      risWestOldCidr1: '172.22.202.128/25'
+      risWestOldCidr2: '172.22.223.0/24'
+      risWestOldCidr3: '172.22.203.128/25'
+      risWestNewDXCidr1: '172.23.226.0/23'
+      risWestNewDXCidr2: '172.23.244.0/25'
+      vpnusers: '172.16.0.0/16'
+      OfficeUsersCidr: '172.28.0.0/15'
+      papiEastOldCidr1: '172.22.206.0/24'
+      papiEastOldCidr2: '172.22.220.0/24'
+      papiEastNewCidr: '172.22.229.0/24'
+      papiWestOldCidr1: '172.22.201.0/25'
+      papiWestOldCidr2: '172.22.221.0/24'
+      papiWestNewCidr: '172.23.229.0/24'
+    us-west-2:
+      risOldMainVPCId: vpc-0470c8b207a4f4c3f #ris-data-test-main-west-vpc
+      risNewTgwVPCId: vpc-0ba0422149d0640e3 #ris-data-test-main-dx-west-vpc
+      risOldMainSubnetId1: subnet-0c03e5c2019d71517 #ris-data-test-main-west-prv-1
+      risOldMainSubnetId2: subnet-0e2503e58ebe844a0 #ris-data-test-main-west-prv-2
+      risNewTgwSubnetId1: subnet-096c3ff019f724553 #ris-data-test-west-dx-prv-1
+      risNewTgwSubnetId2: subnet-00e2288588bd0343a #ris-data-test-west-dx-prv-2
+      risEastOldCidr1: '172.22.211.128/25'
+      risEastOldCidr2: '172.22.222.0/24'
+      risEastOldCidr3: '172.22.203.0/25'
+      risEastNewTgwCidr1: '172.22.226.0/23'
+      risEastNewTgwCidr2: '172.22.244.0/25'
+      risWestOldCidr1: '172.22.202.128/25'
+      risWestOldCidr2: '172.22.223.0/24'
+      risWestOldCidr3: '172.22.203.128/25'
+      risWestNewDXCidr1: '172.23.226.0/23'
+      risWestNewDXCidr2: '172.23.244.0/25'
+      vpnusers: '172.16.0.0/16'
+      OfficeUsersCidr: '172.28.0.0/15'
+      papiEastOldCidr1: '172.22.206.0/24'
+      papiEastOldCidr2: '172.22.220.0/24'
+      papiEastNewCidr: '172.22.229.0/24'
+      papiWestOldCidr1: '172.22.201.0/25'
+      papiWestOldCidr2: '172.22.221.0/24'
+      papiWestNewCidr: '172.23.229.0/24'
+  '806317452177': ## PRODUCTION ##
+    us-east-1:
+      risOldMainVPCId: vpc-0c4e9017349fd2492 #ris-data-prod-main-east-vpc
+      risNewTgwVPCId: vpc-0e661f8beba4c7d9a #ris-data-prod-main-tgw-east-vpc
+      risOldMainSubnetId1: subnet-02a93d1d267dc1c83 #ris-data-prod-main-east-prv-1
+      risOldMainSubnetId2: subnet-0ba9e9ad01e5f8e32 #ris-data-prod-main-east-prv-2
+      risNewTgwSubnetId1: subnet-0943ad275f22147e4 #ris-data-prod-main-tgw-east-prv-1
+      risNewTgwSubnetId2: subnet-0a1f5cd21612a69a8 #ris-data-prod-main-tgw-east-prv-2
+      risEastOldCidr1: '172.22.212.0/25'
+      risEastOldCidr2: '172.22.255.0/24'
+      risEastNewTgwCidr1: '172.22.225.0/24'
+      risEastNewTgwCidr2: '172.22.244.128/25'
+      risWestOldCidr1: '172.22.202.0/25'
+      risWestNewDXCidr1: '172.23.225.0/24'
+      risWestNewDXCidr2: '172.23.244.128/25'
+      vpnusers: '172.16.0.0/16'
+      OfficeUsersCidr: '172.28.0.0/15'
+      papiEastOldCidr1: '172.22.207.0/24'
+      papiEastNewCidr1: '172.22.228.0/24'
+      papiWestOldCidr1: '172.22.201.128/25'
+      papiWestNewCidr1: '172.23.228.0/24'
+    us-west-2:
+      risOldMainVPCId: vpc-00c15ce4a276571a4 #ris-data-prod-main-west-vpc
+      risNewTgwVPCId: vpc-02889895f44968cdd #ris-data-prod-dx-west-vpc
+      risOldMainSubnetId1: subnet-0c73fcec8aacea3c2 #ris-data-prod-west-main-prv-1
+      risOldMainSubnetId2: subnet-005b5ee0c1c25b92b #ris-data-prod-west-main-prv-2
+      risNewTgwSubnetId1: subnet-092574739fb35c10b #ris-data-prod-west-dx-1
+      risNewTgwSubnetId2: subnet-00f1f00acdbec397a #ris-data-prod-west-dx-2
+      risEastOldCidr1: '172.22.212.0/25'
+      risEastOldCidr2: '172.22.255.0/24'
+      risEastNewTgwCidr1: '172.22.225.0/24'
+      risEastNewTgwCidr2: '172.22.244.128/25'
+      risWestOldCidr1: '172.22.202.0/25'
+      risWestNewDXCidr1: '172.23.225.0/24'
+      risWestNewDXCidr2: '172.23.244.128/25'
+      vpnusers: '172.16.0.0/16'
+      OfficeUsersCidr: '172.28.0.0/15'
+      papiEastOldCidr1: '172.22.207.0/24'
+      papiEastNewCidr1: '172.22.228.0/24'
+      papiWestOldCidr1: '172.22.201.128/25'
+      papiWestNewCidr1: '172.23.228.0/24'
+  environments:
+    dev:
+      cpuUnits: 512
+      ramGB: 1GB
+      MemoryReservationMB: 1028
+      minCapacity: 2
+      maxCapacity: 3
+      hostedzoneid: Z2065JB2QKWK37
+      cacheNodeType: cache.t2.medium
+    qa:
+      cpuUnits: 512
+      ramGB: 1GB
+      MemoryReservationMB: 1028
+      minCapacity: 2
+      maxCapacity: 3
+      hostedzoneid: Z16MFBOF4M8ITU
+      cacheNodeType: cache.t2.medium
+    uat:
+      cpuUnits: 512
+      ramGB: 1GB
+      MemoryReservationMB: 1028
+      minCapacity: 2
+      maxCapacity: 10
+      hostedzoneid: Z1U5SYGSPUJGIQ
+      cacheNodeType: cache.t2.medium
+    prod:
+      cpuUnits: 512
+      ramGB: 1GB
+      MemoryReservationMB: 1028
+      minCapacity: 4
+      maxCapacity: 20
+      hostedzoneid: ZOLOIAZ9YG9R5
+      cacheNodeType: cache.r5.large
+  dev:
+    us-east-1:
+      RISDNSCertificateArn: arn:aws:acm:us-east-1:961287003934:certificate/6dedf001-9c3b-49e7-be55-3007f15548d1
+  qa:
+    us-east-1:
+      RISDNSCertificateArn: arn:aws:acm:us-east-1:961287003934:certificate/b6243fde-933c-4a06-9be8-5fa6a3df4351
+  uat:
+    us-east-1:
+      RISDNSCertificateArn: arn:aws:acm:us-east-1:961287003934:certificate/b298cee2-5147-4a91-a70f-8ffcf2728101
+  prod:
+    us-east-1:
+      RISDNSCertificateArn: arn:aws:acm:us-east-1:806317452177:certificate/8aeaa5ff-4a7c-4e1b-84f2-f720cdfa5734
+Resources:
+  ######################### IAM ROLES #####################
+  ContainerIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        Fn::If:
+          - Master
+          - !Sub ${ServiceName}-${EnvironmentName}-role
+          - !Sub ${ServiceName}-${BranchName}-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: LambdaPermissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - ecr:*
+                Resource: arn:aws:logs:*:*:*
+        - PolicyName: LogsWriter
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sts:AssumeRole
+                Resource: !Ref writerRoleArn
+        - PolicyName: SecretManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetResourcePolicy
+                  - secretsmanager:GetSecretValue
+                  - secretsmanager:DescribeSecret
+                  - secretsmanager:ListSecretVersionIds
+                Resource: '*'
+        - PolicyName: S3access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:*
+                Resource:
+                  - !Sub arn:aws:s3::::storesystems-configuration-${EnvironmentName}
+                  - !Sub arn:aws:s3::::storesystems-configuration-${EnvironmentName}/*
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: ecs-service
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'elasticloadbalancing:DeregisterInstancesFromLoadBalancer'
+                  - 'elasticloadbalancing:DeregisterTargets'
+                  - 'elasticloadbalancing:Describe*'
+                  - 'elasticloadbalancing:RegisterInstancesWithLoadBalancer'
+                  - 'elasticloadbalancing:RegisterTargets'
+                  - 'ecr:GetAuthorizationToken'
+                  - 'ecr:BatchCheckLayerAvailability'
+                  - 'ecr:GetDownloadUrlForLayer'
+                  - 'ecr:BatchGetImage'
+                  - 'ecr:*'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                  - 'kinesis:*'
+                Resource: '*'
+        - PolicyName: LogsWriter
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - sts:AssumeRole
+                Resource: !Ref writerRoleArn
+  CloudwatchLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::If:
+          - Master
+          - !Sub ${ServiceName}-${EnvironmentName}
+          - !Sub ${ServiceName}-${BranchName}
+      RetentionInDays: 7
+  ############### CONTAINER INFRASTRUCTURE ###############
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref ContainerIamRole
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName:
+        Fn::If:
+          - Master
+          - !Sub ${ServiceName}-${EnvironmentName}
+          - !Sub ${ServiceName}-${BranchName}
+  Taskdefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family:
+        Fn::If:
+          - Master
+          - !Sub ${ServiceName}-${EnvironmentName}
+          - !Sub ${ServiceName}-${BranchName}
+      Cpu: !FindInMap [environments, !Ref EnvironmentName, cpuUnits]
+      Memory: !FindInMap [environments, !Ref EnvironmentName, ramGB]
+      TaskRoleArn: !GetAtt ContainerIamRole.Arn
+      ExecutionRoleArn: !GetAtt TaskRole.Arn
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ContainerDefinitions:
+        - Name:
+            Fn::If:
+              - Master
+              - !Sub ${ServiceName}-${EnvironmentName}
+              - !Sub ${ServiceName}-${BranchName}
+          Essential: 'true'
+          Image: !Ref DockerImage
+          MemoryReservation: 1024
+          PortMappings:
+            - ContainerPort: 3110
+          Environment:
+            - Name: ApplicationName
+              Value: RIS2.0
+            - Name: ENVIRONMENT
+              Value: !Ref EnvironmentName
+            - Name: logLevel
+              Value: !Ref logLevel
+            - Name: logsKinesisStream
+              Value: !Ref 7LogKinesisStream
+            - Name: writerRoleArn
+              Value: !Ref writerRoleArn
+            - Name: PORT
+              Value: 3110
+            - Name: bff_base_url
+              Value: !Sub 'http://storesytemservice.ris-qa.7-eleven.com'
+            - Name: originator
+              Value: !Ref ServiceName
+            - Name: secretname
+              Value: ordering
+            - Name: ALLSTORESBUCKET
+              Value: storesystems-hostdata-inbound-qa/store-terminal-mapping
+            - Name: ALLOWEDSTORESBUCKET
+              Value: storesystems-configuration-qa
+            - Name: STORE_USERS_API
+              Value: 'https://api.ris-dev.7-eleven.com/7bsu'
+            - Name: STORE_USERS_API_KEY
+              Value: '4EIuG6aeIt5vyqRDebZWIaEELhC44Y7K6JY7ZSiw'
+            - Name: STORE_USERS_API_VERSION
+              Value: 'v1'
+            - Name: aws_region
+              Value: us-east-1
+            - Name: STORE_PROFILE_API
+              Value: 'https://h2aenywnqe.execute-api.us-east-1.amazonaws.com/live'
+            - Name: STORE_PROFILE_API_KEY
+              Value: 'LSVaZSLwDElIifu6Nvzl886BCDtmLSm7MN9rroM3'
+            - Name: REDIS_URL
+              Value:
+                Fn::If:
+                  - Production
+                  - Fn::ImportValue: !Sub 'ordering-config-endpoint-prod'
+                  - Fn::ImportValue: !Sub 'ordering-config-endpoint-dev'
+            - Name: REDIS_PORT
+              Value: 6379
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref 'CloudwatchLogsGroup'
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: !Sub ${ServiceName}
+          HealthCheck:
+            Command: ['CMD-SHELL', 'curl -f http://localhost:3110/healthcheck || exit 1']
+            Interval: 10
+            Retries: 2
+            StartPeriod: 10
+            Timeout: 5
+  EcsService:
+    Type: AWS::ECS::Service
+    DependsOn:
+      - LoadBalancerListener
+    Properties:
+      Cluster: !Ref ECSCluster
+      # DeploymentConfiguration: #TODO look into this.
+      #   DeploymentConfiguration
+      DesiredCount: !FindInMap [environments, !Ref EnvironmentName, minCapacity]
+      HealthCheckGracePeriodSeconds: 60
+      LaunchType: FARGATE
+      LoadBalancers:
+        - TargetGroupArn: !Ref TargetGroup
+          ContainerPort: 3110
+          ContainerName:
+            Fn::If:
+              - Master
+              - !Sub ${ServiceName}-${EnvironmentName}
+              - !Sub ${ServiceName}-${BranchName}
+      ServiceName:
+        Fn::If:
+          - Master
+          - !Sub ${ServiceName}-${EnvironmentName}
+          - !Sub ${ServiceName}-${BranchName}
+
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref EcsSecurityGroup
+          Subnets:
+            - !FindInMap [!Ref 'AWS::AccountId', !Ref 'AWS::Region', risNewTgwSubnetId1]
+            - !FindInMap [!Ref 'AWS::AccountId', !Ref 'AWS::Region', risNewTgwSubnetId2]
+      # PlacementConstraints: #TODO look into this.
+      #  - PlacementConstraints, ...
+      # PlacementStrategies: #TODO look into this.
+      #  - PlacementStrategies, ...
+      # Role: String #TODO look into this.
+      # SchedulingStrategy: String #TODO look into this.
+      # ServiceRegistries: #TODO look into this.
+      #  - ServiceRegistry
+      TaskDefinition: !Ref Taskdefinition
+
+  ############### ECS AUTOSCALING ###############
+  EcsScalableTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    DependsOn:
+      - EcsService
+      - ECSCluster
+    Properties:
+      MaxCapacity: !FindInMap [environments, !Ref EnvironmentName, maxCapacity]
+      MinCapacity: !FindInMap [environments, !Ref EnvironmentName, minCapacity]
+      ResourceId: !Sub
+        - service/${clusterName}/${serviceName}
+        - clusterName: !Ref ECSCluster
+          serviceName: !GetAtt EcsService.Name
+      RoleARN: !GetAtt [EcsAutoScalingRole, Arn]
+      ScalableDimension: ecs:service:DesiredCount
+      ServiceNamespace: ecs
+  EcsScalingPolicy:
+    Type: 'AWS::ApplicationAutoScaling::ScalingPolicy'
+    Properties:
+      PolicyName: ServiceTargetTracking
+      PolicyType: TargetTrackingScaling #StepScaling and TargetTrackingScaling supported
+      ScalingTargetId: !Ref EcsScalableTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        DisableScaleIn: false
+        ScaleInCooldown: 60
+        ScaleOutCooldown: 15
+        TargetValue: 80.0
+  EcsAutoScalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: application-autoscaling.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: service-autoscaling
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - application-autoscaling:*
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:PutMetricAlarm
+                  - ecs:DescribeServices
+                  - ecs:UpdateService
+                  - ecr:*
+                Resource: '*'
+  ############### LOAD BALANCER ###############
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      VpcId: !FindInMap [!Ref 'AWS::AccountId', !Ref 'AWS::Region', risNewTgwVPCId]
+      Port: 3110
+      TargetType: ip
+      Protocol: HTTP
+      HealthCheckPath: '/healthcheck'
+      HealthCheckProtocol: HTTP
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Subnets:
+        - !FindInMap [!Ref 'AWS::AccountId', !Ref 'AWS::Region', risNewTgwSubnetId1]
+        - !FindInMap [!Ref 'AWS::AccountId', !Ref 'AWS::Region', risNewTgwSubnetId2]
+      Type: application
+      Scheme: internal
+      SecurityGroups:
+        - !Ref 'LoadBalancerSecurityGroup'
+      #      LoadBalancerAttributes: # can only enabled for NLB
+      #        - Key: load_balancing.cross_zone.enabled
+      #          Value: 'true'
+      Tags:
+        - Key: Name
+          Value:
+            Fn::If:
+              - Master
+              - !Sub ${ServiceName}-${EnvironmentName}
+              - !Sub ${ServiceName}-${BranchName}
+  LoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      Certificates:
+        - CertificateArn: !FindInMap [!Ref 'EnvironmentName', !Ref 'AWS::Region', RISDNSCertificateArn]
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+  LoadBalancerListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      ListenerArn: !Ref LoadBalancerListener
+      Priority: 100
+      Conditions:
+        - Field: path-pattern
+          Values:
+            - /7boss/order
+      Actions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: forward
+  ################### SECURITY GROUP ##############################
+  EcsSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ECS Security Group
+      VpcId: !FindInMap [!Ref 'AWS::AccountId', !Ref 'AWS::Region', risNewTgwVPCId]
+      SecurityGroupIngress:
+        - SourceSecurityGroupId: !GetAtt LoadBalancerSecurityGroup.GroupId
+          IpProtocol: tcp
+          FromPort: '3110'
+          ToPort: '3110'
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Load Balancer Security Group
+      VpcId: !FindInMap [!Ref 'AWS::AccountId', !Ref 'AWS::Region', risNewTgwVPCId]
+  risEastOldCidr1Ingress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref 'LoadBalancerSecurityGroup'
+      Description: IP range of new east tgw vpc cidr
+      IpProtocol: tcp
+      FromPort: '443'
+      ToPort: '443'
+      CidrIp: !FindInMap [!Ref 'AWS::AccountId', !Ref 'AWS::Region', risEastOldCidr1]
+  risEastOldCidr2Ingress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref 'LoadBalancerSecurityGroup'
+      Description: IP range of new east tgw vpc cidr
+      IpProtocol: tcp
+      FromPort: '443'
+      ToPort: '443'
+      CidrIp: !FindInMap [!Ref 'AWS::AccountId', !Ref 'AWS::Region', risEastOldCidr2]
+  risEastOldCidr3Ingress:
+    Condition: DevAccount
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref 'LoadBalancerSecurityGroup'
+      Description: IP range of new east tgw vpc cidr
+      IpProtocol: tcp
+      FromPort: '443'
+      ToPort: '443'
+      CidrIp: !FindInMap [!Ref 'AWS::AccountId', !Ref 'AWS::Region', risEastOldCidr3]
+  risWestOldCidr1Ingress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref 'LoadBalancerSecurityGroup'
+      Description: IP range of new west dx vpc cidr
+      IpProtocol: tcp
+      FromPort: '443'
+      ToPort: '443'
+      CidrIp: !FindInMap [!Ref 'AWS::AccountId', !Ref 'AWS::Region', risWestOldCidr1]
+  risWestOldCidr2Ingress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: DevAccount
+    Properties:
+      GroupId: !Ref 'LoadBalancerSecurityGroup'
+      Description: IP range of new west dx vpc cidr
+      IpProtocol: tcp
+      FromPort: '443'
+      ToPort: '443'
+      CidrIp: !FindInMap [!Ref 'AWS::AccountId', !Ref 'AWS::Region', risWestOldCidr2]
+  risWestOldCidr3Ingress:
+    Condition: DevAccount
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref 'LoadBalancerSecurityGroup'
+      Description: IP range of new west dx vpc cidr
+      IpProtocol: tcp
+      FromPort: '443'
+      ToPort: '443'
+      CidrIp: !FindInMap [!Ref 'AWS::AccountId', !Ref 'AWS::Region', risWestOldCidr3]
+  risEastNewCidr1Ingress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref 'LoadBalancerSecurityGroup'
+      Description: IP range of new east tgw vpc cidr
+      IpProtocol: tcp
+      FromPort: '443'
+      ToPort: '443'
+      CidrIp: !FindInMap [!Ref 'AWS::AccountId', !Ref 'AWS::Region', risEastNewTgwCidr1]
+  risWestNewCidr1Ingress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref 'LoadBalancerSecurityGroup'
+      Description: IP range of new west dx vpc cidr
+      IpProtocol: tcp
+      FromPort: '443'
+      ToPort: '443'
+      CidrIp: !FindInMap [!Ref 'AWS::AccountId', !Ref 'AWS::Region', risWestNewDXCidr1]
+  risEastNewCidr2Ingress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref 'LoadBalancerSecurityGroup'
+      Description: IP range of new east tgw vpc cidr
+      IpProtocol: tcp
+      FromPort: '443'
+      ToPort: '443'
+      CidrIp: !FindInMap [!Ref 'AWS::AccountId', !Ref 'AWS::Region', risEastNewTgwCidr2]
+  risWestNewCidr2Ingress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref 'LoadBalancerSecurityGroup'
+      Description: IP range of new west dx vpc cidr
+      IpProtocol: tcp
+      FromPort: '443'
+      ToPort: '443'
+      CidrIp: !FindInMap [!Ref 'AWS::AccountId', !Ref 'AWS::Region', risWestNewDXCidr2]
+  OfficeUsersCidrIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: DevAccount
+    Properties:
+      Description: 'IP Range of 7-11 office network'
+      GroupId: !Ref 'LoadBalancerSecurityGroup'
+      IpProtocol: tcp
+      FromPort: '443'
+      ToPort: '443'
+      CidrIp: !FindInMap [!Ref 'AWS::AccountId', !Ref 'AWS::Region', OfficeUsersCidr]
+  vpnusersIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: DevAccount
+    Properties:
+      Description: 'IP Range of vpcn cidr range'
+      GroupId: !Ref 'LoadBalancerSecurityGroup'
+      IpProtocol: tcp
+      FromPort: '443'
+      ToPort: '443'
+      CidrIp: !FindInMap [!Ref 'AWS::AccountId', !Ref 'AWS::Region', vpnusers]
+  ########################DNS_RECORDSET############################
+  Route53:
+    Type: AWS::Route53::RecordSet
+    Condition: DevEnvironment
+    Properties:
+      HostedZoneId: !FindInMap [environments, !Ref EnvironmentName, hostedzoneid]
+      Comment: CNAME redirect for ELB
+      Name: !Sub 7bossauth.ris-${EnvironmentName}.7-eleven.com
+      Type: A
+      AliasTarget:
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
+        DNSName: !GetAtt LoadBalancer.DNSName
+  ##########################################################
+  ############### CLOUD WATCH ALARM FOR SERVICE #############
+  CPUUtilizationHighAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Condition: Production
+    Properties:
+      AlarmName: !Sub VeryHighCPU-${ServiceName}-${EnvironmentName}
+      AlarmDescription: 'Service is running out of CPU'
+      Namespace: 'AWS/ECS'
+      Dimensions:
+        - Name: ClusterName
+          Value:
+            Fn::If:
+              - Master
+              - !Sub ${ServiceName}-${EnvironmentName}
+              - !Sub ${ServiceName}-${BranchName}
+        - Name: ServiceName
+          Value:
+            Fn::If:
+              - Master
+              - !Sub ${ServiceName}-${EnvironmentName}
+              - !Sub ${ServiceName}-${BranchName}
+      MetricName: CPUUtilization
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 70
+      AlarmActions:
+        - !Sub arn:aws:sns:${AWS::Region}:${AWS::AccountId}:testing_CloudWatch_Alarms_Topic
+
+  MemoryUtilizationHighAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Condition: Production
+    Properties:
+      AlarmName: !Sub VeryHighMemory-${ServiceName}-${EnvironmentName}
+      AlarmDescription: 'Service is running out of Memory'
+      Namespace: 'AWS/ECS'
+      Dimensions:
+        - Name: ClusterName
+          Value:
+            Fn::If:
+              - Master
+              - !Sub ${ServiceName}-${EnvironmentName}
+              - !Sub ${ServiceName}-${BranchName}
+        - Name: ServiceName
+          Value:
+            Fn::If:
+              - Master
+              - !Sub ${ServiceName}-${EnvironmentName}
+              - !Sub ${ServiceName}-${BranchName}
+      MetricName: MemoryUtilization
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Statistic: Average
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 70
+      AlarmActions:
+        - !Sub arn:aws:sns:${AWS::Region}:${AWS::AccountId}:testing_CloudWatch_Alarms_Topic

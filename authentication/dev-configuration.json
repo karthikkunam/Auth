@@ -1,0 +1,23 @@
+{
+    "Parameters": {
+        "EnvironmentName": "dev",
+        "ContactEmail": "srikanth.mandala@7-11.com",
+        "BusinessUnit": "RIS2.0",
+        "logLevel": "info",
+        "7LogKinesisStream": "prod-7LogsNonProdKinesisStream",
+        "writerRoleArn": "arn:aws:iam::774047977279:role/app-7logs-master-infrastructure-pr-7LogsWriterRole-ONZ60NU7KSMV"
+    },
+    "Tags": {
+        "Application": "RIS2.0"
+    },
+    "StackPolicy": {
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "NotAction": "Update:Delete",
+                "Principal": "*",
+                "Resource": "*"
+            }
+        ]
+    }
+}
